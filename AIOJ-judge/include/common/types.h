@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <nlohmann/json.hpp>
 
 namespace aioj {
 
@@ -50,5 +51,10 @@ struct JudgeTask {
     int time_limit_ms;
     int memory_limit_kb;
 };
+
+// JSON序列化
+void to_json(nlohmann::json& j, const TestCaseResult& r);
+void to_json(nlohmann::json& j, const JudgeResult& r);
+JudgeTask task_from_json(const nlohmann::json& j);
 
 } // namespace aioj
