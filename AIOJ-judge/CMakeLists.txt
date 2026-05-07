@@ -1,0 +1,68 @@
+cmake_minimum_required(VERSION 3.14)
+project(AIOJ-Judge LANGUAGES CXX)
+
+# vcpkg 工具链
+if(DEFINED ENV{VCPKG_ROOT})
+    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+endif()
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# 依赖查找
+find_package(Threads REQUIRED)
+find_package(hiredis CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
+find_package(Catch2 CONFIG REQUIRED)
+
+# 源文件集合
+set(COMMON_SOURCES
+    src/common/types.cpp
+    src/common/config.cpp
+)
+
+set(REDIS_SOURCES
+    src/redis/redis_client.cpp
+)
+
+set(JUDGE_SOURCES
+    src/judge/judge_worker.cpp
+    src/judge/sandbox.cpp
+    src/judge/language_handler.cpp
+)
+
+set(THREAD_POOL_SOURCES
+    src/thread_pool/thread_pool.cpp
+)
+
+# 主库
+add_library(aioj_judge_lib STATIC
+    ${COMMON_SOURCES}
+    ${REDIS_SOURCES}
+    ${JUDGE_SOURCES}
+    ${THREAD_POOL_SOURCES}
+)
+
+target_include_directories(aioj_judge_lib PUBLIC include)
+target_link_libraries(aioj_judge_lib PUBLIC
+    Threads::Threads
+    hiredis::hiredis
+    nlohmann_json::nlohmann_json
+)
+
+# 主程序
+add_executable(aioj-judge src/main.cpp)
+target_link_libraries(aioj-judge PRIVATE aioj_judge_lib)
+
+# 测试
+enable_testing()
+add_executable(judge_tests
+    test/test_main.cpp
+    test/test_config.cpp
+    test/test_thread_pool.cpp
+    test/test_judge.cpp
+)
+target_link_libraries(judge_tests PRIVATE aioj_judge_lib Catch2::Catch2WithMain)
+target_include_directories(judge_tests PRIVATE ${CMAKE_SOURCE_DIR}/test)
+add_test(NAME judge_tests COMMAND judge_tests)
