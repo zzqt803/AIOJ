@@ -82,3 +82,17 @@ def get_submission_detail(db: Session,submission_id: int,current_user: User)->Su
     if submission.user_id != current_user.id:
         raise ValueError("提交记录不存在")
     return SubmissionDetailResponse.model_validate(submission)
+
+
+def get_ai_analysis(db: Session, submission_id: int, current_user: User) -> AIAnalysisResultResponse:
+    submission = db.query(Submission).filter(Submission.id == submission_id).first()
+    if not submission:
+        raise ValueError("提交记录不存在")
+    if submission.user_id != current_user.id:
+        raise ValueError("提交记录不存在")
+
+    return AIAnalysisResultResponse(
+        submission_id=submission.id,
+        ai_analysis_status=submission.ai_analysis_status,
+        ai_analysis_result=submission.ai_analysis_result
+    )

@@ -130,12 +130,100 @@
           </div>
         </div>
       </div>
+
+      <!-- AI 分析面板 -->
+      <div class="ai-panel" :class="{ 'ai-panel-open': showAiPanel }">
+        <button class="ai-toggle" @click="toggleAiPanel" :title="showAiPanel ? '收起 AI 分析' : '展开 AI 分析'">
+          <svg viewBox="0 0 16 16" fill="currentColor">
+            <path v-if="showAiPanel" fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+            <path v-else fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/>
+          </svg>
+        </button>
+
+        <div class="ai-content" v-if="showAiPanel">
+          <div class="ai-header">
+            <h3>AI 代码分析</h3>
+            <button v-if="submission?.ai_analysis_status === 'completed'" class="btn-refresh" @click="refreshAiAnalysis">
+              <svg viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 1 1 .908-.418A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+            </button>
+          </div>
+
+          <!-- 未提交状态 -->
+          <div v-if="!submission" class="ai-empty">
+            <p>提交代码后，AI 将自动分析你的代码</p>
+          </div>
+
+          <!-- 等待分析 -->
+          <div v-else-if="submission.ai_analysis_status === 'pending'" class="ai-empty">
+            <div class="ai-loading">
+              <div class="spinner"></div>
+              <span>AI 正在分析中...</span>
+            </div>
+          </div>
+
+          <!-- 分析中 -->
+          <div v-else-if="submission.ai_analysis_status === 'analyzing'" class="ai-empty">
+            <div class="ai-loading">
+              <div class="spinner"></div>
+              <span>AI 正在分析中...</span>
+            </div>
+          </div>
+
+          <!-- 分析完成 -->
+          <div v-else-if="submission.ai_analysis_status === 'completed' && aiAnalysis" class="ai-result">
+            <!-- 评分 -->
+            <div class="ai-score">
+              <span class="score-value">{{ aiAnalysis.score }}</span>
+              <span class="score-label">分</span>
+            </div>
+
+            <!-- 整体评价 -->
+            <div class="ai-section">
+              <h4>整体评价</h4>
+              <p>{{ aiAnalysis.summary }}</p>
+            </div>
+
+            <!-- 复杂度分析 -->
+            <div class="ai-complexity">
+              <div class="complexity-item">
+                <span class="complexity-label">时间复杂度</span>
+                <span class="complexity-value">{{ aiAnalysis.time_complexity }}</span>
+              </div>
+              <div class="complexity-item">
+                <span class="complexity-label">空间复杂度</span>
+                <span class="complexity-value">{{ aiAnalysis.space_complexity }}</span>
+              </div>
+            </div>
+
+            <!-- 问题列表 -->
+            <div class="ai-section" v-if="aiAnalysis.issues?.length">
+              <h4>问题</h4>
+              <div class="ai-issues">
+                <div class="issue-item" v-for="(issue, index) in aiAnalysis.issues" :key="index">
+                  <span class="issue-line" v-if="issue.line">第 {{ issue.line }} 行</span>
+                  <span class="issue-desc">{{ issue.description }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 改进建议 -->
+            <div class="ai-section" v-if="aiAnalysis.suggestions?.length">
+              <h4>改进建议</h4>
+              <ul class="ai-suggestions">
+                <li v-for="(suggestion, index) in aiAnalysis.suggestions" :key="index">
+                  {{ suggestion }}
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import UserNavbar from '../../components/UserNavbar.vue'
 import { problemApi } from '../../api/problem'
@@ -151,7 +239,10 @@ const code = ref('')
 const submitting = ref(false)
 const judging = ref(false)
 const submission = ref(null)
+const showAiPanel = ref(false)
+const aiAnalysis = ref(null)
 let pollTimer = null
+let aiPollTimer = null
 
 function difficultyLabel(d) {
   return { easy: '简单', medium: '中等', hard: '困难' }[d] || d
@@ -180,6 +271,10 @@ function testCaseStatusLabel(status) {
   return map[status] || status
 }
 
+function toggleAiPanel() {
+  showAiPanel.value = !showAiPanel.value
+}
+
 async function loadProblem() {
   try {
     problem.value = await problemApi.getDetail(problemId)
@@ -191,13 +286,13 @@ async function loadProblem() {
 }
 
 async function handleSubmit() {
-  // 防止重复提交
   if (submitting.value || judging.value) return
   if (!code.value.trim()) return
 
   submitting.value = true
   judging.value = false
   submission.value = null
+  aiAnalysis.value = null
 
   try {
     const res = await submissionApi.submit({
@@ -207,6 +302,7 @@ async function handleSubmit() {
     })
     submission.value = res
     judging.value = true
+    showAiPanel.value = true
     startPolling(res.id)
   } catch (e) {
     console.error(e)
@@ -224,6 +320,8 @@ function startPolling(submissionId) {
       submission.value = res
       if (res.status !== 'pending') {
         stopPolling()
+        // 开始轮询 AI 分析结果
+        startAiPolling(submissionId)
       }
     } catch (e) {
       stopPolling()
@@ -239,8 +337,45 @@ function stopPolling() {
   judging.value = false
 }
 
+function startAiPolling(submissionId) {
+  stopAiPolling()
+  aiPollTimer = setInterval(async () => {
+    try {
+      const res = await submissionApi.getAiAnalysis(submissionId)
+      submission.value = {
+        ...submission.value,
+        ai_analysis_status: res.ai_analysis_status
+      }
+      if (res.ai_analysis_status === 'completed') {
+        aiAnalysis.value = res.ai_analysis_result
+        stopAiPolling()
+      } else if (res.ai_analysis_status === 'pending') {
+        // 继续等待
+      }
+    } catch (e) {
+      stopAiPolling()
+    }
+  }, 2000)
+}
+
+function stopAiPolling() {
+  if (aiPollTimer) {
+    clearInterval(aiPollTimer)
+    aiPollTimer = null
+  }
+}
+
+function refreshAiAnalysis() {
+  if (submission.value?.id) {
+    startAiPolling(submission.value.id)
+  }
+}
+
 onMounted(loadProblem)
-onUnmounted(stopPolling)
+onUnmounted(() => {
+  stopPolling()
+  stopAiPolling()
+})
 </script>
 
 <style scoped>
@@ -259,8 +394,8 @@ onUnmounted(stopPolling)
 }
 
 .left-panel {
-  width: 45%;
-  min-width: 360px;
+  width: 40%;
+  min-width: 320px;
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -600,6 +735,251 @@ onUnmounted(stopPolling)
 .polling-text {
   font-size: 13px;
   color: var(--text-muted);
+}
+
+/* AI 面板 */
+.ai-panel {
+  width: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+  background: var(--bg-secondary);
+  transition: width 0.3s ease-out;
+  position: relative;
+}
+
+.ai-panel-open {
+  width: 360px;
+}
+
+.ai-toggle {
+  position: absolute;
+  left: -28px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 56px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: 6px 0 0 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: all 0.15s;
+  z-index: 10;
+}
+
+.ai-toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.ai-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ai-content {
+  height: 100%;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.ai-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.ai-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.btn-refresh {
+  width: 28px;
+  height: 28px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.btn-refresh:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.btn-refresh svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ai-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.ai-empty p {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.ai-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.ai-loading span {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.ai-result {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.ai-score {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 16px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.score-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+}
+
+.score-label {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.ai-section h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.ai-section p {
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.ai-complexity {
+  display: flex;
+  gap: 16px;
+}
+
+.complexity-item {
+  flex: 1;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+}
+
+.complexity-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.complexity-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+}
+
+.ai-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.issue-item {
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.issue-line {
+  display: inline-block;
+  padding: 2px 6px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.issue-desc {
+  color: var(--text-primary);
+}
+
+.ai-suggestions {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-suggestions li {
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.ai-suggestions li::before {
+  content: "•";
+  color: var(--accent);
+  margin-right: 8px;
 }
 
 .skeleton {

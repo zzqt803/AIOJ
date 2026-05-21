@@ -55,3 +55,12 @@ def get_submission_detail(
     current_user: User = Depends(get_current_user),
 ):
     return service.get_submission_detail(db, submission_id, current_user)
+
+
+@router.get("/{submission_id}/ai-analysis", response_model=AIAnalysisResultResponse)
+def get_ai_analysis(
+    submission_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return service.get_ai_analysis(db, submission_id, current_user)

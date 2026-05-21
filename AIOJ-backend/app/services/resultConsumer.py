@@ -4,10 +4,11 @@ from app.db.redis import redis_client
 from app.db.session import SessionLocal
 from app.core.config import settings
 from app.models.submissions import Submission, StatusEnum, OverallResultEnum
+from app.services.aiService import analyze_submission_sync
 
 
 def process_result(result_data: dict):
-    """处理判题结果，更新数据库"""
+    """处理判题结果，更新数据库并触发 AI 分析"""
     db = SessionLocal()
     try:
         submission_id = int(result_data.get("submission_id", 0))
@@ -38,11 +39,16 @@ def process_result(result_data: dict):
 
         db.commit()
         print(f"Submission {submission_id} updated: {submission.result.value}")
+
+        # 触发 AI 分析（同步执行）
+        analyze_submission_sync(submission_id, db)
+
     except Exception as e:
         db.rollback()
         print(f"Error processing result: {e}")
     finally:
         db.close()
+
 
 def result_consumer_worker():
     """结果消费者线程"""
@@ -57,6 +63,7 @@ def result_consumer_worker():
                 process_result(result_data)
         except Exception as e:
             print(f"Consumer error: {e}")
+
 
 def start_result_consumer():
     """启动结果消费者线程"""
