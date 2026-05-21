@@ -24,7 +24,7 @@ public:
     int default_time_limit_ms = 2000;
     int default_memory_limit_kb = 262144;
 
-    // 路径配置
+    // 测试用例根目录（相对于配置文件位置，或绝对路径）
     std::string testcase_root = "./testcases";
 
     // 日志级别

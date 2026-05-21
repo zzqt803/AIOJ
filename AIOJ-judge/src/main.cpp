@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
     signal(SIGTERM, signal_handler);
 
     // 加载配置
-    std::string config_path = "config/judge.conf";
+    std::string config_path = "../config/judge.conf";
     if (argc > 1) {
         config_path = argv[1];
     }
@@ -41,11 +41,11 @@ int main(int argc, char* argv[]) {
     std::cout << "Redis: " << config.redis_host << ":" << config.redis_port << std::endl;
     std::cout << "Threads: " << config.thread_count << std::endl;
 
-    // 连接Redis
-    RedisClient* redis = nullptr;
+    // 连接Redis（用于接收任务）
+    RedisClient* redis_recv = nullptr;
     for (int retry = 0; retry < 3; ++retry) {
         try {
-            redis = new RedisClient(config.redis_host, config.redis_port, config.redis_db);
+            redis_recv = new RedisClient(config.redis_host, config.redis_port, config.redis_db);
             break;
         } catch (const std::exception& e) {
             std::cerr << "redis connect failed (attempt " << retry + 1 << "): " << e.what() << std::endl;
@@ -55,8 +55,18 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if (!redis || !redis->is_connected()) {
+    if (!redis_recv || !redis_recv->is_connected()) {
         std::cerr << "cannot connect to redis, exiting" << std::endl;
+        return 1;
+    }
+
+    // 连接Redis（用于发送结果）
+    RedisClient* redis_send = nullptr;
+    try {
+        redis_send = new RedisClient(config.redis_host, config.redis_port, config.redis_db);
+    } catch (const std::exception& e) {
+        std::cerr << "cannot create redis send connection: " << e.what() << std::endl;
+        delete redis_recv;
         return 1;
     }
 
@@ -67,7 +77,8 @@ int main(int argc, char* argv[]) {
 
     // 主循环
     while (running) {
-        std::string task_json = redis->brpop(config.task_queue, 5);
+        // 使用单独的连接接收任务（阻塞5秒）
+        std::string task_json = redis_recv->brpop(config.task_queue, 5);
 
         if (task_json.empty()) {
             continue;
@@ -84,14 +95,14 @@ int main(int argc, char* argv[]) {
 
         std::cout << "received task: " << task.submission_id << std::endl;
 
-        // 提交到线程池
-        pool.enqueue([task, &config, redis]() {
+        // 提交到线程池（使用单独的发送连接）
+        pool.enqueue([task, &config, redis_send]() {
             JudgeWorker worker(config);
             JudgeResult result = worker.judge(task);
 
-            // 推送结果
+            // 推送结果（使用单独的连接，无需加锁）
             nlohmann::json result_json = result;
-            redis->lpush(config.result_queue, result_json.dump());
+            redis_send->lpush(config.result_queue, result_json.dump());
 
             std::cout << "task " << task.submission_id
                       << " completed: " << to_string(result.overall_status) << std::endl;
@@ -99,6 +110,7 @@ int main(int argc, char* argv[]) {
     }
 
     std::cout << "shutting down..." << std::endl;
-    delete redis;
+    delete redis_recv;
+    delete redis_send;
     return 0;
 }

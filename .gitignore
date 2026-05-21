@@ -1,0 +1,119 @@
+# ============================================
+# AIOJ 项目 .gitignore
+# ============================================
+
+# ============================================
+# Python 后端
+# ============================================
+AIOJ-backend/venv/
+AIOJ-backend/__pycache__/
+AIOJ-backend/**/__pycache__/
+AIOJ-backend/*.pyc
+AIOJ-backend/**/*.pyc
+AIOJ-backend/.env
+AIOJ-backend/*.egg-info/
+AIOJ-backend/dist/
+AIOJ-backend/build/
+AIOJ-backend/.pytest_cache/
+AIOJ-backend/.coverage
+AIOJ-backend/htmlcov/
+
+# ============================================
+# Node.js 前端
+# ============================================
+AIOJ-frontend/node_modules/
+AIOJ-frontend/dist/
+AIOJ-frontend/.local
+AIOJ-frontend/.cache
+AIOJ-frontend/*.local
+AIOJ-frontend/.env
+AIOJ-frontend/.env.local
+AIOJ-frontend/.env.*.local
+AIOJ-frontend/npm-debug.log*
+AIOJ-frontend/yarn-debug.log*
+AIOJ-frontend/yarn-error.log*
+AIOJ-frontend/pnpm-debug.log*
+
+# ============================================
+# C++ 判题进程
+# ============================================
+AIOJ-judge/build/
+AIOJ-judge/bin/
+AIOJ-judge/*.o
+AIOJ-judge/*.obj
+AIOJ-judge/*.exe
+AIOJ-judge/*.out
+AIOJ-judge/CMakeCache.txt
+AIOJ-judge/CMakeFiles/
+AIOJ-judge/cmake_install.cmake
+AIOJ-judge/Makefile
+AIOJ-judge/compile_commands.json
+
+# ============================================
+# IDE 和编辑器
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+
+# ============================================
+# 操作系统
+# ============================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# ============================================
+# 临时文件
+# ============================================
+*.tmp
+*.temp
+*.log
+*.bak
+*.backup
+
+# ============================================
+# 测试和覆盖率
+# ============================================
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+*.cover
+*.py,cover
+.hypothesis/
+
+# ============================================
+# 虚拟环境
+# ============================================
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# ============================================
+# 分发和打包
+# ============================================
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+*.whl
+parts/
+sdist/
+var/
+wheels/

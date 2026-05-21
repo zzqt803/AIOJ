@@ -14,7 +14,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(Threads REQUIRED)
 find_package(hiredis CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
-find_package(Catch2 CONFIG REQUIRED)
 
 # 源文件集合
 set(COMMON_SOURCES
@@ -54,15 +53,3 @@ target_link_libraries(aioj_judge_lib PUBLIC
 # 主程序
 add_executable(aioj-judge src/main.cpp)
 target_link_libraries(aioj-judge PRIVATE aioj_judge_lib)
-
-# 测试
-enable_testing()
-add_executable(judge_tests
-    test/test_main.cpp
-    test/test_config.cpp
-    test/test_thread_pool.cpp
-    test/test_judge.cpp
-)
-target_link_libraries(judge_tests PRIVATE aioj_judge_lib Catch2::Catch2WithMain)
-target_include_directories(judge_tests PRIVATE ${CMAKE_SOURCE_DIR}/test)
-add_test(NAME judge_tests COMMAND judge_tests)

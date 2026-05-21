@@ -27,11 +27,11 @@ public:
     // 清理沙箱
     void cleanup();
 
-    // 执行命令
-    // time_limit_ms: CPU时间限制（毫秒）
-    // memory_limit_kb: 内存限制（KB）
+    // 准备可执行文件（复制到沙箱）
+    bool prepare_executable(const std::string& executable_path);
+
+    // 执行命令（使用已准备好的可执行文件）
     SandboxResult execute(
-        const std::string& command,
         const std::string& input_file,
         const std::string& output_file,
         int time_limit_ms,

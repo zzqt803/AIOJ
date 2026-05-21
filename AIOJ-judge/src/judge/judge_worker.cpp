@@ -5,10 +5,14 @@
 #include <algorithm>
 #include <filesystem>
 #include <iostream>
+#include <atomic>
 
 namespace fs = std::filesystem;
 
 namespace aioj {
+
+// 全局box_id计数器（多线程安全）
+static std::atomic<int> g_box_id_counter{0};
 
 JudgeWorker::JudgeWorker(const Config& config) : config_(config) {}
 
@@ -16,43 +20,41 @@ bool JudgeWorker::load_test_cases(
     const std::string& problem_id,
     std::vector<std::pair<std::string, std::string>>& cases
 ) {
-    std::string problem_dir = config_.testcase_root + "/" + problem_id;
-    if (!fs::exists(problem_dir)) {
+    fs::path problem_dir = fs::path(config_.testcase_root) / problem_id;
+
+    if (!fs::exists(problem_dir) || !fs::is_directory(problem_dir)) {
         return false;
     }
 
     cases.clear();
     int i = 1;
     while (true) {
-        std::string in_file = problem_dir + "/" + std::to_string(i) + ".in";
-        std::string out_file = problem_dir + "/" + std::to_string(i) + ".out";
+        fs::path in_file = problem_dir / (std::to_string(i) + ".in");
+        fs::path out_file = problem_dir / (std::to_string(i) + ".out");
 
         if (!fs::exists(in_file) || !fs::exists(out_file)) {
             break;
         }
 
-        cases.emplace_back(in_file, out_file);
+        cases.emplace_back(in_file.string(), out_file.string());
         ++i;
     }
 
     return !cases.empty();
 }
 
-// 去除行尾空白和多余空行
 static std::string normalize(const std::string& str) {
     std::istringstream iss(str);
     std::ostringstream oss;
     std::string line;
     bool first = true;
     while (std::getline(iss, line)) {
-        // 去除行尾空白
         size_t end = line.find_last_not_of(" \t\r\n");
         if (end != std::string::npos) {
             line = line.substr(0, end + 1);
         } else {
             line.clear();
         }
-        // 跳过末尾空行
         if (line.empty() && iss.eof()) continue;
         if (!first) oss << "\n";
         oss << line;
@@ -74,67 +76,6 @@ bool JudgeWorker::compare_output(
                          std::istreambuf_iterator<char>());
 
     return normalize(actual) == normalize(expected);
-}
-
-TestCaseResult JudgeWorker::judge_single(
-    const std::string& executable,
-    LanguageHandler* handler,
-    int box_id,
-    const std::string& input_file,
-    const std::string& expected_output,
-    int test_case_id,
-    int time_limit_ms,
-    int memory_limit_kb
-) {
-    TestCaseResult result;
-    result.test_case_id = test_case_id;
-
-    // 创建工作目录
-    std::string work_dir = "/tmp/box_" + std::to_string(box_id);
-    fs::create_directories(work_dir);
-
-    Sandbox sandbox(box_id, work_dir);
-    if (!sandbox.init()) {
-        result.status = JudgeStatus::SYSTEM_ERROR;
-        result.error_message = "failed to init sandbox";
-        return result;
-    }
-
-    // 获取运行命令
-    auto run_cmd = handler->get_run_command(executable);
-    std::string command;
-    for (size_t i = 0; i < run_cmd.size(); ++i) {
-        if (i > 0) command += " ";
-        command += run_cmd[i];
-    }
-
-    std::string output_file = work_dir + "/output.txt";
-
-    // 执行
-    SandboxResult exec_result = sandbox.execute(
-        command, input_file, output_file,
-        time_limit_ms, memory_limit_kb
-    );
-
-    result.time_used_ms = exec_result.time_used_ms;
-    result.memory_used_kb = exec_result.memory_used_kb;
-
-    // 判断状态
-    if (exec_result.time_limit_hit) {
-        result.status = JudgeStatus::TIME_LIMIT;
-    } else if (exec_result.memory_used_kb > memory_limit_kb) {
-        result.status = JudgeStatus::MEMORY_LIMIT;
-    } else if (exec_result.exit_code != 0) {
-        result.status = JudgeStatus::RUNTIME_ERROR;
-        result.error_message = exec_result.error;
-    } else if (!compare_output(output_file, expected_output)) {
-        result.status = JudgeStatus::WRONG_ANSWER;
-    } else {
-        result.status = JudgeStatus::ACCEPTED;
-    }
-
-    sandbox.cleanup();
-    return result;
 }
 
 JudgeResult JudgeWorker::judge(const JudgeTask& task) {
@@ -163,6 +104,7 @@ JudgeResult JudgeWorker::judge(const JudgeTask& task) {
     fs::create_directories(work_dir);
 
     std::string executable;
+    std::string full_executable_path;
     if (handler->needs_compilation()) {
         std::string compile_error;
         executable = handler->compile(task.source_code, work_dir, compile_error);
@@ -175,9 +117,27 @@ JudgeResult JudgeWorker::judge(const JudgeTask& task) {
             result.details.push_back(ce);
             return result;
         }
+        full_executable_path = work_dir + "/" + executable;
     }
 
-    // 逐个测试点评测
+    // 为当前任务分配唯一的box_id
+    int box_id = g_box_id_counter.fetch_add(1) % 100;
+
+    // 初始化沙箱（只初始化一次）
+    Sandbox sandbox(box_id, work_dir);
+    if (!sandbox.init()) {
+        result.overall_status = JudgeStatus::SYSTEM_ERROR;
+        return result;
+    }
+
+    // 准备可执行文件（只复制一次）
+    if (!sandbox.prepare_executable(full_executable_path)) {
+        result.overall_status = JudgeStatus::SYSTEM_ERROR;
+        sandbox.cleanup();
+        return result;
+    }
+
+    // 设置资源限制
     int time_limit = task.time_limit_ms > 0
         ? task.time_limit_ms
         : config_.default_time_limit_ms;
@@ -185,14 +145,40 @@ JudgeResult JudgeWorker::judge(const JudgeTask& task) {
         ? task.memory_limit_kb
         : config_.default_memory_limit_kb;
 
+    // 逐个测试点评测
     bool all_accepted = true;
     for (size_t i = 0; i < cases.size(); ++i) {
-        TestCaseResult tc = judge_single(
-            executable, handler.get(), 0,
-            cases[i].first, cases[i].second,
-            static_cast<int>(i + 1),
+        std::string output_file = work_dir + "/output_" + std::to_string(i + 1) + ".txt";
+
+        std::cerr << "[Judge] Running test case " << (i + 1) << std::endl;
+
+        SandboxResult exec_result = sandbox.execute(
+            cases[i].first, output_file,
             time_limit, memory_limit
         );
+
+        std::cerr << "[Judge] Test case " << (i + 1) << " executed, exit_code=" << exec_result.exit_code << std::endl;
+
+        TestCaseResult tc;
+        tc.test_case_id = static_cast<int>(i + 1);
+        tc.time_used_ms = exec_result.time_used_ms;
+        tc.memory_used_kb = exec_result.memory_used_kb;
+
+        // 判断状态
+        if (exec_result.time_limit_hit) {
+            tc.status = JudgeStatus::TIME_LIMIT;
+        } else if (exec_result.memory_used_kb > memory_limit) {
+            tc.status = JudgeStatus::MEMORY_LIMIT;
+        } else if (exec_result.exit_code != 0) {
+            tc.status = JudgeStatus::RUNTIME_ERROR;
+            tc.error_message = exec_result.error;
+        } else if (!compare_output(output_file, cases[i].second)) {
+            tc.status = JudgeStatus::WRONG_ANSWER;
+        } else {
+            tc.status = JudgeStatus::ACCEPTED;
+        }
+
+        std::cerr << "[Judge] Test case " << (i + 1) << " result: " << to_string(tc.status) << std::endl;
 
         result.details.push_back(tc);
         result.total_time_ms += tc.time_used_ms;
@@ -207,8 +193,11 @@ JudgeResult JudgeWorker::judge(const JudgeTask& task) {
         ? JudgeStatus::ACCEPTED
         : JudgeStatus::WRONG_ANSWER;
 
-    // 清理工作目录
+    std::cerr << "[Judge] Cleaning up sandbox" << std::endl;
+    sandbox.cleanup();
+    std::cerr << "[Judge] Removing work dir" << std::endl;
     fs::remove_all(work_dir);
+    std::cerr << "[Judge] Done" << std::endl;
 
     return result;
 }
