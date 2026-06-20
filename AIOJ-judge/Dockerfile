@@ -33,7 +33,8 @@ RUN git clone https://github.com/ioi/isolate.git /tmp/isolate \
     && cd /tmp/isolate \
     && make isolate \
     && cp isolate /usr/local/bin/isolate \
-    && mkdir -p /var/local/lib/isolate \
+    && mkdir -p /var/local/lib/isolate /usr/local/etc \
+    && sed 's|@BOXDIR@|/var/local/lib/isolate|g' default.cf.in > /usr/local/etc/isolate \
     && rm -rf /tmp/isolate
 
 # Setup isolate user and permissions
@@ -41,9 +42,7 @@ RUN useradd -r -s /bin/false isolate || true \
     && echo "isolate:0:65536" >> /etc/subuid \
     && echo "isolate:0:65536" >> /etc/subgid \
     && chmod u+s /usr/local/bin/isolate \
-    && mkdir -p /usr/local/etc \
-    && printf "box_root = /var/local/lib/isolate\nlock_root = /run/isolate/locks\ncg_root = auto:/run/isolate/cgroup\nfirst_uid = 100000\nfirst_gid = 100000\nnum_boxes = 100\n" > /usr/local/etc/isolate \
-    && mkdir -p /var/local/lib/isolate /run/isolate/locks \
+    && mkdir -p /run/isolate/locks \
     && /usr/local/bin/isolate --init
 
 RUN mkdir -p /opt/aioj/test_cases
