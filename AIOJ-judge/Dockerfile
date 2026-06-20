@@ -42,7 +42,8 @@ RUN useradd -r -s /bin/false isolate || true \
     && echo "isolate:0:65536" >> /etc/subgid \
     && chmod u+s /usr/local/bin/isolate \
     && mkdir -p /usr/local/etc \
-    && printf "first_uid=100000\nfirst_gid=100000\nnum_boxes=100\n" > /usr/local/etc/isolate \
+    && printf "box_root = /var/local/lib/isolate\nlock_root = /run/isolate/locks\ncg_root = auto:/run/isolate/cgroup\nfirst_uid = 100000\nfirst_gid = 100000\nnum_boxes = 100\n" > /usr/local/etc/isolate \
+    && mkdir -p /var/local/lib/isolate /run/isolate/locks \
     && /usr/local/bin/isolate --init
 
 RUN mkdir -p /opt/aioj/test_cases
