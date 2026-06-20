@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: aioj-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123456}
+      MYSQL_DATABASE: aioj
+      MYSQL_USER: aioj
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-aioj123456}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./建表语句.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./init-admin.sql:/docker-entrypoint-initdb.d/02-admin.sql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: aioj-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./AIOJ-backend
+      dockerfile: Dockerfile
+    container_name: aioj-backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: mysql+pymysql://aioj:${MYSQL_PASSWORD:-aioj123456}@mysql:3306/aioj
+      SECRET_KEY: ${SECRET_KEY:-a3f8c2d1e4b5a6f7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1}
+      ACCESS_TOKEN_EXPIRE_MINUTES: 1440
+      ALGORITHM: HS256
+      HOST: 0.0.0.0
+      PORT: 8000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      TASK_QUEUE: judge_task
+      RESULT_QUEUE: judge_result
+      AI_API_KEY: ${AI_API_KEY}
+      AI_MODEL: ${AI_MODEL:-mimo-v2.5}
+      AI_BASE_URL: ${AI_BASE_URL:-https://api.xiaomimimo.com/anthropic}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  judge:
+    build:
+      context: ./AIOJ-judge
+      dockerfile: Dockerfile
+    container_name: aioj-judge
+    privileged: true
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      TASK_QUEUE: judge_task
+      RESULT_QUEUE: judge_result
+    volumes:
+      - test_cases:/opt/aioj/test_cases
+      - isolate_data:/var/local/lib/isolate
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./AIOJ-frontend
+      dockerfile: Dockerfile
+    container_name: aioj-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
+  redis_data:
+  test_cases:
+  isolate_data:

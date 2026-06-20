@@ -277,7 +277,11 @@ function toggleAiPanel() {
 
 async function loadProblem() {
   try {
-    problem.value = await problemApi.getDetail(problemId)
+    const data = await problemApi.getDetail(problemId)
+    if (data && typeof data.tags === 'string') {
+      data.tags = JSON.parse(data.tags)
+    }
+    problem.value = data
   } catch (e) {
     console.error(e)
   } finally {

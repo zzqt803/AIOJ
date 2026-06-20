@@ -139,7 +139,10 @@ async function loadProblems() {
       ...(filters.value.tag && { tag: filters.value.tag }),
     }
     const res = await problemApi.getList(params)
-    problems.value = res.items
+    problems.value = (res.items || []).map(p => ({
+      ...p,
+      tags: typeof p.tags === 'string' ? JSON.parse(p.tags) : (p.tags || []),
+    }))
     total.value = res.total
   } catch (e) {
     console.error(e)

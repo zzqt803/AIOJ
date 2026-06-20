@@ -281,7 +281,10 @@ async function loadProblems() {
       ...(search.value && { tag: search.value }),
     }
     const res = await request.get('/problems', { params })
-    problems.value = res.items
+    problems.value = (res.items || []).map(p => ({
+      ...p,
+      tags: typeof p.tags === 'string' ? JSON.parse(p.tags) : (p.tags || []),
+    }))
     total.value = res.total
   } catch (e) {
     console.error(e)

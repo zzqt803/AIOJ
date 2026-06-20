@@ -2,6 +2,7 @@
 -- AIOJ 智能在线判题平台 - 建表语句
 -- 数据库: MySQL 8.0+
 -- 字符集: utf8mb4
+-- 支持重复执行（IF NOT EXISTS）
 -- ============================================
 
 CREATE DATABASE IF NOT EXISTS aioj DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -10,7 +11,7 @@ USE aioj;
 -- ============================================
 -- 1. 用户表
 -- ============================================
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id            INT          NOT NULL AUTO_INCREMENT COMMENT '用户ID',
     username      VARCHAR(50)  NOT NULL COMMENT '用户名',
     email         VARCHAR(100) NOT NULL COMMENT '邮箱',
@@ -26,7 +27,7 @@ CREATE TABLE users (
 -- ============================================
 -- 2. 题目表
 -- ============================================
-CREATE TABLE problems (
+CREATE TABLE IF NOT EXISTS problems (
     id            INT          NOT NULL AUTO_INCREMENT COMMENT '题目ID',
     title         VARCHAR(100) NOT NULL COMMENT '题目标题',
     difficulty    ENUM('easy', 'medium', 'hard') NOT NULL DEFAULT 'easy' COMMENT '题目难度',
@@ -50,7 +51,7 @@ CREATE TABLE problems (
 -- ============================================
 -- 3. 提交表
 -- ============================================
-CREATE TABLE submissions (
+CREATE TABLE IF NOT EXISTS submissions (
     id                 INT                                     NOT NULL AUTO_INCREMENT COMMENT '提交ID',
     user_id            INT                                     NOT NULL COMMENT '用户ID',
     problem_id         INT                                     NOT NULL COMMENT '题目ID',
@@ -77,7 +78,7 @@ CREATE TABLE submissions (
 -- ============================================
 -- 4. 题单表
 -- ============================================
-CREATE TABLE problem_sets (
+CREATE TABLE IF NOT EXISTS problem_sets (
     id          INT          NOT NULL AUTO_INCREMENT COMMENT '题单ID',
     title       VARCHAR(100) NOT NULL COMMENT '题单标题',
     description TEXT         NULL COMMENT '题单描述',
@@ -93,7 +94,7 @@ CREATE TABLE problem_sets (
 -- ============================================
 -- 5. 题单条目表（题单-题目关联）
 -- ============================================
-CREATE TABLE problem_set_items (
+CREATE TABLE IF NOT EXISTS problem_set_items (
     id             INT NOT NULL AUTO_INCREMENT COMMENT '关联ID',
     problem_set_id INT NOT NULL COMMENT '题单ID',
     problem_id     INT NOT NULL COMMENT '题目ID',
@@ -108,7 +109,7 @@ CREATE TABLE problem_set_items (
 -- ============================================
 -- 6. 讨论表
 -- ============================================
-CREATE TABLE discussions (
+CREATE TABLE IF NOT EXISTS discussions (
     id         INT      NOT NULL AUTO_INCREMENT COMMENT '评论ID',
     problem_id INT      NOT NULL COMMENT '题目ID',
     user_id    INT      NOT NULL COMMENT '用户ID',
@@ -128,7 +129,7 @@ CREATE TABLE discussions (
 -- ============================================
 -- 7. 用户统计表
 -- ============================================
-CREATE TABLE user_stats (
+CREATE TABLE IF NOT EXISTS user_stats (
     id                  INT      NOT NULL AUTO_INCREMENT COMMENT '统计ID',
     user_id             INT      NOT NULL COMMENT '用户ID',
     total_submissions   INT      NOT NULL DEFAULT 0 COMMENT '总提交次数',
@@ -149,7 +150,7 @@ CREATE TABLE user_stats (
 -- ============================================
 -- 8. 收藏表
 -- ============================================
-CREATE TABLE bookmarks (
+CREATE TABLE IF NOT EXISTS bookmarks (
     id         INT      NOT NULL AUTO_INCREMENT COMMENT '收藏ID',
     user_id    INT      NOT NULL COMMENT '用户ID',
     problem_id INT      NOT NULL COMMENT '题目ID',
@@ -164,10 +165,10 @@ CREATE TABLE bookmarks (
 
 
 -- ============================================
--- 视图
+-- 视图（先删后建，避免重复报错）
 -- ============================================
 
--- 题目统计视图：每道题的提交数、通过数、通过率
+DROP VIEW IF EXISTS v_problem_stats;
 CREATE VIEW v_problem_stats AS
 SELECT
     p.id            AS problem_id,
@@ -183,7 +184,7 @@ FROM problems p
 LEFT JOIN submissions s ON s.problem_id = p.id AND s.status = 'completed'
 GROUP BY p.id, p.title, p.difficulty;
 
--- 用户排行榜视图：按通过题数排名
+DROP VIEW IF EXISTS v_user_leaderboard;
 CREATE VIEW v_user_leaderboard AS
 SELECT
     u.id                AS user_id,
@@ -200,7 +201,7 @@ JOIN user_stats us ON us.user_id = u.id
 WHERE u.is_active = 1 AND u.role = 'user'
 ORDER BY us.solved_problems DESC, us.accepted_submissions ASC;
 
--- 题单摘要视图：每个题单包含的题目数量
+DROP VIEW IF EXISTS v_problem_set_summary;
 CREATE VIEW v_problem_set_summary AS
 SELECT
     ps.id           AS problem_set_id,
@@ -217,10 +218,10 @@ GROUP BY ps.id, ps.title, ps.creator_id, u.username, ps.is_public, ps.created_at
 
 
 -- ============================================
--- 触发器
+-- 触发器（先删后建）
 -- ============================================
 
--- 用户注册后自动创建统计记录
+DROP TRIGGER IF EXISTS trg_after_user_insert;
 DELIMITER //
 CREATE TRIGGER trg_after_user_insert
 AFTER INSERT ON users
@@ -230,15 +231,13 @@ BEGIN
 END //
 DELIMITER ;
 
--- 提交判题完成后自动更新用户统计
+DROP TRIGGER IF EXISTS trg_after_submission_update;
 DELIMITER //
 CREATE TRIGGER trg_after_submission_update
 AFTER UPDATE ON submissions
 FOR EACH ROW
 BEGIN
-    -- 仅在判题状态变为 completed 且结果为 passed 时处理
     IF NEW.status = 'completed' AND NEW.result = 'passed' AND OLD.status = 'pending' THEN
-        -- 检查该用户是否首次通过此题
         SET @first_pass = (
             SELECT COUNT(*) FROM submissions
             WHERE user_id = NEW.user_id
@@ -247,7 +246,6 @@ BEGIN
               AND id < NEW.id
         );
 
-        -- 更新统计
         UPDATE user_stats SET
             total_submissions = total_submissions + 1,
             accepted_submissions = accepted_submissions + 1,
@@ -258,7 +256,6 @@ BEGIN
             last_active_date    = CURDATE()
         WHERE user_id = NEW.user_id;
     ELSEIF NEW.status = 'completed' AND OLD.status = 'pending' THEN
-        -- 未通过的提交只增加总提交数
         UPDATE user_stats SET
             total_submissions = total_submissions + 1,
             last_active_date  = CURDATE()
@@ -269,10 +266,10 @@ DELIMITER ;
 
 
 -- ============================================
--- 存储过程
+-- 存储过程（先删后建）
 -- ============================================
 
--- 更新用户连续刷题天数（建议由定时任务每日调用）
+DROP PROCEDURE IF EXISTS sp_update_streak;
 DELIMITER //
 CREATE PROCEDURE sp_update_streak()
 BEGIN
@@ -289,13 +286,10 @@ BEGIN
         IF done THEN LEAVE read_loop; END IF;
 
         IF v_last_active = CURDATE() THEN
-            -- 今天已活跃，跳过
             ITERATE read_loop;
         ELSEIF v_last_active = DATE_SUB(CURDATE(), INTERVAL 1 DAY) THEN
-            -- 昨天活跃，连续天数不变（等待今天活跃时再+1）
             ITERATE read_loop;
         ELSE
-            -- 超过1天未活跃，重置连续天数
             UPDATE user_stats SET current_streak = 0 WHERE user_id = v_user_id;
         END IF;
     END LOOP;
@@ -303,7 +297,7 @@ BEGIN
 END //
 DELIMITER ;
 
--- 获取指定题目的统计数据
+DROP PROCEDURE IF EXISTS sp_get_problem_stats;
 DELIMITER //
 CREATE PROCEDURE sp_get_problem_stats(IN p_problem_id INT)
 BEGIN
