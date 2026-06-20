@@ -40,7 +40,8 @@ RUN git clone https://github.com/ioi/isolate.git /tmp/isolate \
 RUN useradd -r -s /bin/false isolate || true \
     && echo "isolate:0:65536" >> /etc/subuid \
     && echo "isolate:0:65536" >> /etc/subgid \
-    && chmod u+s /usr/local/bin/isolate
+    && chmod u+s /usr/local/bin/isolate \
+    && /usr/local/bin/isolate --init
 
 RUN mkdir -p /opt/aioj/test_cases
 
