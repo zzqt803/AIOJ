@@ -12,8 +12,16 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # 依赖查找
 find_package(Threads REQUIRED)
-find_package(hiredis CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+
+# hiredis：apt 包不提供 CMake config，手动查找
+find_library(HIREDIS_LIBRARY hiredis REQUIRED)
+find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h REQUIRED)
+add_library(hiredis::hiredis UNKNOWN IMPORTED)
+set_target_properties(hiredis::hiredis PROPERTIES
+    IMPORTED_LOCATION "${HIREDIS_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES "${HIREDIS_INCLUDE_DIR}"
+)
 
 # 源文件集合
 set(COMMON_SOURCES
