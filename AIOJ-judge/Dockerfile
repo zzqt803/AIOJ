@@ -41,6 +41,7 @@ RUN useradd -r -s /bin/false isolate || true \
     && echo "isolate:0:65536" >> /etc/subuid \
     && echo "isolate:0:65536" >> /etc/subgid \
     && chmod u+s /usr/local/bin/isolate \
+    && mkdir -p /usr/local/etc/isolate \
     && /usr/local/bin/isolate --init
 
 RUN mkdir -p /opt/aioj/test_cases
