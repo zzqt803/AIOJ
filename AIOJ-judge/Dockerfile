@@ -41,7 +41,7 @@ RUN useradd -r -s /bin/false isolate || true \
     && echo "isolate:0:65536" >> /etc/subuid \
     && echo "isolate:0:65536" >> /etc/subgid \
     && chmod u+s /usr/local/bin/isolate \
-    && mkdir -p /usr/local/etc/isolate \
+    && mkdir -p /usr/local/etc \
     && printf "first_uid=100000\nfirst_gid=100000\nnum_boxes=100\n" > /usr/local/etc/isolate \
     && /usr/local/bin/isolate --init
 
