@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y \
 # Install isolate
 RUN apt-get update && apt-get install -y \
     libcap-dev libseccomp-dev libsystemd-dev \
-    pkg-config \
+    pkg-config git \
     && rm -rf /var/lib/apt/lists/*
 
 RUN git clone https://github.com/ioi/isolate.git /tmp/isolate \
