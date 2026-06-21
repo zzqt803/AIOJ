@@ -82,7 +82,12 @@ def get_problem_set_detail(db: Session, problem_set_id: int) -> ProblemSetDetail
         creator_id=problem_set.creator_id,
         creator_name=creator.username if creator else "",
         is_public=problem_set.is_public,
-        problems=[ProblemInSet.model_validate(p) for p in problems],
+        problems=[ProblemInSet.model_validate({
+            "problem_id": p.problem_id,
+            "sort_order": p.sort_order,
+            "title": p.title,
+            "difficulty": p.difficulty.value if hasattr(p.difficulty, 'value') else p.difficulty,
+        }) for p in problems],
         created_at=problem_set.created_at,
     )
 
