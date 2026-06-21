@@ -63,3 +63,12 @@ class AdminSubmissionListResponse(BaseModel):
     page: int
     page_size: int
     items: List[AdminSubmissionItem]
+
+
+# 仪表盘统计
+class AdminDashboardStatsResponse(BaseModel):
+    total_users: int
+    total_problems: int
+    total_submissions: int
+    total_problem_sets: int
+    accepted_count: int

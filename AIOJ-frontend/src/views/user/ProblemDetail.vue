@@ -13,6 +13,18 @@
           <span :class="['difficulty-badge', problem?.difficulty]">
             {{ difficultyLabel(problem?.difficulty) }}
           </span>
+          <button
+            v-if="isLoggedIn"
+            class="bookmark-btn"
+            :class="{ active: isBookmarked }"
+            @click="toggleBookmark"
+            :title="isBookmarked ? '取消收藏' : '收藏题目'"
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor">
+              <path v-if="isBookmarked" d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z"/>
+              <path v-else d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+          </button>
         </div>
 
         <div class="panel-body" v-if="problem">
@@ -65,6 +77,44 @@
           <section class="section" v-if="problem.hint">
             <h3>提示</h3>
             <div class="content hint">{{ problem.hint }}</div>
+          </section>
+
+          <!-- 讨论区 -->
+          <section class="section discussion-section">
+            <h3>讨论区 ({{ discussionTotal }})</h3>
+
+            <div v-if="isLoggedIn" class="comment-input">
+              <textarea
+                v-model="newComment"
+                placeholder="发表你的评论..."
+                rows="3"
+                class="comment-textarea"
+              ></textarea>
+              <button
+                class="btn-comment"
+                :disabled="!newComment.trim() || submittingComment"
+                @click="submitComment"
+              >
+                {{ submittingComment ? '发表中...' : '发表' }}
+              </button>
+            </div>
+            <div v-else class="login-hint">
+              <router-link to="/login">登录</router-link>后发表评论
+            </div>
+
+            <div class="comment-list">
+              <div v-for="item in discussions" :key="item.id" class="comment-item">
+                <div class="comment-header">
+                  <span class="comment-user">{{ item.username }}</span>
+                  <span class="comment-time">{{ discussionTimeAgo(item.created_at) }}</span>
+                </div>
+                <div class="comment-body">{{ item.content }}</div>
+                <div class="comment-actions" v-if="auth.user && (auth.user.id === item.user_id || auth.user.role === 'admin')">
+                  <button class="btn-delete-comment" @click="deleteComment(item.id)">删除</button>
+                </div>
+              </div>
+              <div v-if="discussions.length === 0" class="no-comments">暂无评论</div>
+            </div>
           </section>
         </div>
 
@@ -223,13 +273,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import UserNavbar from '../../components/UserNavbar.vue'
 import { problemApi } from '../../api/problem'
 import { submissionApi } from '../../api/submission'
+import { bookmarkApi } from '../../api/bookmark'
+import { discussionApi } from '../../api/discussion'
+import { useAuthStore } from '../../store/auth'
 
 const route = useRoute()
+const auth = useAuthStore()
+const isLoggedIn = computed(() => !!auth.user)
 const problemId = Number(route.params.id)
 
 const problem = ref(null)
@@ -243,6 +298,13 @@ const showAiPanel = ref(false)
 const aiAnalysis = ref(null)
 let pollTimer = null
 let aiPollTimer = null
+
+const isBookmarked = ref(false)
+const discussions = ref([])
+const discussionPage = ref(1)
+const discussionTotal = ref(0)
+const newComment = ref('')
+const submittingComment = ref(false)
 
 function difficultyLabel(d) {
   return { easy: '简单', medium: '中等', hard: '困难' }[d] || d
@@ -375,7 +437,81 @@ function refreshAiAnalysis() {
   }
 }
 
-onMounted(loadProblem)
+async function checkBookmark() {
+  if (!isLoggedIn.value) return
+  try {
+    const res = await bookmarkApi.check(problemId)
+    isBookmarked.value = res.is_bookmarked
+  } catch (e) {
+    // ignore
+  }
+}
+
+async function toggleBookmark() {
+  if (!isLoggedIn.value) return
+  try {
+    if (isBookmarked.value) {
+      await bookmarkApi.delete(problemId)
+      isBookmarked.value = false
+    } else {
+      await bookmarkApi.create({ problem_id: problemId })
+      isBookmarked.value = true
+    }
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+async function loadDiscussions() {
+  try {
+    const res = await discussionApi.getList(problemId, { page: discussionPage.value, page_size: 20 })
+    discussions.value = res.items
+    discussionTotal.value = res.total
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+async function submitComment() {
+  if (!newComment.value.trim() || submittingComment.value) return
+  submittingComment.value = true
+  try {
+    await discussionApi.create(problemId, { content: newComment.value.trim() })
+    newComment.value = ''
+    loadDiscussions()
+  } catch (e) {
+    alert(e.response?.data?.detail || '发表失败')
+  } finally {
+    submittingComment.value = false
+  }
+}
+
+async function deleteComment(id) {
+  if (!confirm('确定要删除这条评论吗？')) return
+  try {
+    await discussionApi.delete(id)
+    loadDiscussions()
+  } catch (e) {
+    alert(e.response?.data?.detail || '删除失败')
+  }
+}
+
+function discussionTimeAgo(dateStr) {
+  const now = new Date()
+  const date = new Date(dateStr)
+  const diff = Math.floor((now - date) / 1000)
+  if (diff < 60) return '刚刚'
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
+  if (diff < 2592000) return `${Math.floor(diff / 86400)} 天前`
+  return date.toLocaleDateString()
+}
+
+onMounted(() => {
+  loadProblem()
+  checkBookmark()
+  loadDiscussions()
+})
 onUnmounted(() => {
   stopPolling()
   stopAiPolling()
@@ -992,6 +1128,168 @@ onUnmounted(() => {
   animation: shimmer 1.5s infinite;
   border-radius: 4px;
   margin-bottom: 12px;
+}
+
+/* Bookmark button */
+.bookmark-btn {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.bookmark-btn:hover {
+  background: var(--bg-hover);
+  color: #f59e0b;
+}
+
+.bookmark-btn.active {
+  color: #f59e0b;
+}
+
+.bookmark-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Discussion section */
+.discussion-section {
+  border-top: 1px solid var(--border);
+  padding-top: 24px;
+}
+
+.comment-input {
+  margin-bottom: 16px;
+}
+
+.comment-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+  margin-bottom: 8px;
+}
+
+.comment-textarea:focus {
+  border-color: var(--accent);
+}
+
+.btn-comment {
+  padding: 7px 16px;
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  font-weight: 600;
+  font-size: 13px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.btn-comment:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.btn-comment:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.login-hint {
+  padding: 12px 16px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.login-hint a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.login-hint a:hover {
+  text-decoration: underline;
+}
+
+.comment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.comment-item {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.comment-item:last-child {
+  border-bottom: none;
+}
+
+.comment-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.comment-user {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.comment-time {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.comment-body {
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.comment-actions {
+  margin-top: 6px;
+}
+
+.btn-delete-comment {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.btn-delete-comment:hover {
+  color: #ef4444;
+}
+
+.no-comments {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
 @keyframes shimmer {

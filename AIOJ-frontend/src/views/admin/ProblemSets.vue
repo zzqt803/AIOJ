@@ -28,6 +28,7 @@
           </div>
           <div class="set-actions">
             <button class="btn-edit" @click="editSet(set)">编辑</button>
+            <button class="btn-manage" @click="manageProblems(set)">管理题目</button>
             <button class="btn-delete" @click="deleteSet(set.id)">删除</button>
           </div>
         </div>
@@ -62,6 +63,41 @@
         </form>
       </div>
     </div>
+
+    <!-- 管理题目模态框 -->
+    <div class="modal-overlay" v-if="managingSet" @click.self="closeManageModal">
+      <div class="modal modal-wide">
+        <h2>管理题目 - {{ managingSet.title }}</h2>
+
+        <div class="add-problem-row">
+          <input
+            v-model="addProblemId"
+            type="number"
+            placeholder="输入题目 ID"
+            class="input-id"
+            @keyup.enter="addProblem"
+          />
+          <button class="btn-primary btn-sm" @click="addProblem" :disabled="!addProblemId || addingProblem">
+            {{ addingProblem ? '添加中...' : '添加' }}
+          </button>
+        </div>
+
+        <div class="problem-list">
+          <div v-if="managingProblems.length === 0" class="empty-list">题单中暂无题目</div>
+          <div v-for="p in managingProblems" :key="p.problem_id" class="problem-row">
+            <span class="problem-id">{{ p.problem_id }}</span>
+            <span class="problem-title">{{ p.title }}</span>
+            <span :class="['difficulty-badge', p.difficulty]">{{ difficultyLabel(p.difficulty) }}</span>
+            <span class="problem-order">排序: {{ p.sort_order }}</span>
+            <button class="btn-remove" @click="removeProblem(p.problem_id)">移除</button>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn-secondary" @click="closeManageModal">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -73,6 +109,10 @@ import { problemSetApi } from '../../api/problemSet'
 const problemSets = ref([])
 const showCreateModal = ref(false)
 const editingSet = ref(null)
+const managingSet = ref(null)
+const managingProblems = ref([])
+const addProblemId = ref('')
+const addingProblem = ref(false)
 
 const form = ref({
   title: '',
@@ -121,6 +161,55 @@ async function deleteSet(id) {
     loadProblemSets()
   } catch (e) {
     alert(e.response?.data?.detail || '删除失败')
+  }
+}
+
+function difficultyLabel(d) {
+  return { easy: '简单', medium: '中等', hard: '困难' }[d] || d
+}
+
+async function manageProblems(set) {
+  managingSet.value = set
+  await loadManagingProblems(set.id)
+}
+
+async function loadManagingProblems(setId) {
+  try {
+    const res = await problemSetApi.getDetail(setId)
+    managingProblems.value = res.problems || []
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+function closeManageModal() {
+  managingSet.value = null
+  managingProblems.value = []
+  addProblemId.value = ''
+}
+
+async function addProblem() {
+  const pid = parseInt(addProblemId.value)
+  if (!pid || addingProblem.value) return
+  addingProblem.value = true
+  try {
+    await problemSetApi.addProblem(managingSet.value.id, { problem_id: pid, sort_order: managingProblems.value.length })
+    addProblemId.value = ''
+    await loadManagingProblems(managingSet.value.id)
+  } catch (e) {
+    alert(e.response?.data?.detail || '添加失败')
+  } finally {
+    addingProblem.value = false
+  }
+}
+
+async function removeProblem(problemId) {
+  if (!confirm(`确定要从题单中移除题目 ${problemId} 吗？`)) return
+  try {
+    await problemSetApi.removeProblem(managingSet.value.id, problemId)
+    await loadManagingProblems(managingSet.value.id)
+  } catch (e) {
+    alert(e.response?.data?.detail || '移除失败')
   }
 }
 
@@ -350,5 +439,127 @@ onMounted(loadProblemSets)
   color: var(--text-secondary);
   font-size: 14px;
   cursor: pointer;
+}
+
+.btn-manage {
+  flex: 1;
+  padding: 8px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  transition: all 0.15s;
+}
+
+.btn-manage:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.modal-wide {
+  max-width: 640px;
+}
+
+.add-problem-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.input-id {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+}
+
+.input-id:focus {
+  border-color: var(--accent);
+}
+
+.btn-sm {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.problem-list {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+}
+
+.empty-list {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.problem-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.problem-row:last-child {
+  border-bottom: none;
+}
+
+.problem-row .problem-id {
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  font-size: 13px;
+  color: var(--text-muted);
+  min-width: 30px;
+}
+
+.problem-row .problem-title {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.difficulty-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.difficulty-badge.easy { color: #10b981; background: rgba(16, 185, 129, 0.1); }
+.difficulty-badge.medium { color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
+.difficulty-badge.hard { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+
+.problem-order {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 60px;
+}
+
+.btn-remove {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.btn-remove:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
 }
 </style>

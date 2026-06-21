@@ -7,6 +7,7 @@ from app.schemas.adminSchema import (
     AdminUserListResponse,
     AdminUserStatsResponse,
     AdminSubmissionListResponse,
+    AdminDashboardStatsResponse,
 )
 import app.services.adminService as service
 
@@ -50,3 +51,11 @@ def get_user_submissions(
     current_user: User = Depends(require_admin),
 ):
     return service.get_user_submissions(db, user_id, page, page_size)
+
+
+@router.get("/dashboard", response_model=AdminDashboardStatsResponse)
+def get_dashboard_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    return service.get_dashboard_stats(db)

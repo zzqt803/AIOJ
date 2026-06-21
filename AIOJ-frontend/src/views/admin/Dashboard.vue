@@ -13,7 +13,7 @@
             <svg viewBox="0 0 20 20" fill="currentColor"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/></svg>
           </div>
           <div class="stat-info">
-            <div class="stat-value">{{ stats.totalProblems || 0 }}</div>
+            <div class="stat-value">{{ stats.total_problems || 0 }}</div>
             <div class="stat-label">题目总数</div>
           </div>
         </div>
@@ -23,7 +23,7 @@
             <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/></svg>
           </div>
           <div class="stat-info">
-            <div class="stat-value">{{ stats.totalSubmissions || 0 }}</div>
+            <div class="stat-value">{{ stats.total_submissions || 0 }}</div>
             <div class="stat-label">提交总数</div>
           </div>
         </div>
@@ -33,7 +33,7 @@
             <svg viewBox="0 0 20 20" fill="currentColor"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/></svg>
           </div>
           <div class="stat-info">
-            <div class="stat-value">{{ stats.totalUsers || 0 }}</div>
+            <div class="stat-value">{{ stats.total_users || 0 }}</div>
             <div class="stat-label">用户总数</div>
           </div>
         </div>
@@ -43,8 +43,18 @@
             <svg viewBox="0 0 20 20" fill="currentColor"><path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z"/></svg>
           </div>
           <div class="stat-info">
-            <div class="stat-value">{{ stats.totalProblemSets || 0 }}</div>
+            <div class="stat-value">{{ stats.total_problem_sets || 0 }}</div>
             <div class="stat-label">题单总数</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon">
+            <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+          </div>
+          <div class="stat-info">
+            <div class="stat-value">{{ stats.accepted_count || 0 }}</div>
+            <div class="stat-label">通过提交</div>
           </div>
         </div>
       </div>
@@ -78,10 +88,21 @@ import request from '../../api/request'
 
 const auth = useAuthStore()
 const user = computed(() => auth.user)
-const stats = ref({})
+const stats = ref({
+  total_users: 0,
+  total_problems: 0,
+  total_submissions: 0,
+  total_problem_sets: 0,
+  accepted_count: 0,
+})
 
 onMounted(async () => {
-  // 这里可以加载统计数据
+  try {
+    const res = await request.get('/admin/dashboard')
+    stats.value = res
+  } catch (e) {
+    console.error(e)
+  }
 })
 </script>
 
@@ -115,7 +136,7 @@ onMounted(async () => {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
   margin-bottom: 40px;
 }

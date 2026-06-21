@@ -3,6 +3,8 @@ from sqlalchemy import func, or_
 from app.models.users import User
 from app.models.user_stats import UserStats
 from app.models.submissions import Submission
+from app.models.problems import Problem
+from app.models.problem_set import ProblemSet
 from app.schemas.adminSchema import (
     AdminUserListQuery,
     AdminUserListResponse,
@@ -10,6 +12,7 @@ from app.schemas.adminSchema import (
     AdminUserStatsResponse,
     AdminSubmissionListResponse,
     AdminSubmissionItem,
+    AdminDashboardStatsResponse,
 )
 
 
@@ -85,4 +88,23 @@ def get_user_submissions(db: Session, user_id: int, page: int = 1, page_size: in
         page=page,
         page_size=page_size,
         items=[AdminSubmissionItem.model_validate(item) for item in items],
+    )
+
+
+def get_dashboard_stats(db: Session) -> AdminDashboardStatsResponse:
+    total_users = db.query(func.count(User.id)).scalar()
+    total_problems = db.query(func.count(Problem.id)).scalar()
+    total_submissions = db.query(func.count(Submission.id)).scalar()
+    total_problem_sets = db.query(func.count(ProblemSet.id)).scalar()
+    accepted_count = db.query(func.count(Submission.id)).filter(
+        Submission.status == 'completed',
+        Submission.result == 'passed',
+    ).scalar()
+
+    return AdminDashboardStatsResponse(
+        total_users=total_users,
+        total_problems=total_problems,
+        total_submissions=total_submissions,
+        total_problem_sets=total_problem_sets,
+        accepted_count=accepted_count,
     )
